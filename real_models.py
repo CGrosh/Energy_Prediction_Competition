@@ -35,10 +35,10 @@ def rmsle(predictions, dmat):
     avg = np.mean(squared_diffs)
     return ('RMSLE', np.sqrt(avg))
 
-def run_it(file, rows, model_type, params):
-    data = get_data(file, nrows=rows)
-    data_pp = process_data(data, 'MinMax', 0.95)
-    return data_pp
+def run_it(file, rows):
+    data = get_data(file, rows)
+    x_train, x_test, y_train, y_test = process_data(data, 'MinMax', 0.95)
+    return x_train, x_test, y_train, y_test
 
 def feature_engine(df):
     df['Year'] = df['timestamp'].str[:4]
@@ -60,18 +60,21 @@ def feature_engine(df):
     cols.remove('site_id')
     cols.remove('Year')
     cols.remove('Month')
-    cols.remove('row_id')
+    # cols.remove('row_id')
 
     data_x = df[cols]
     data_x = pd.get_dummies(data_x, columns=['primary_use'])
+    return data_x
 
 
 def get_data(filename, row_num):
     df = pd.read_csv(filename, nrows=row_num)
+    # print(df.head())
     return df
 
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
+    # print(data_x.head())
     data_y = df['meter_reading']
 
     imp = SimpleImputer(missing_values=np.nan, strategy='mean')
@@ -88,8 +91,34 @@ def process_data(df, scale, pca_level):
     
     x_train_pp = imp.fit_transform(x_train)
     x_train_pp = scaler.fit_transform(x_train_pp)
-    x_train_pp = imp.transform(x_train)
-    x_train_pp = scaler.transform(x_train_pp)
+    x_train_pp = pca.fit_transform(x_train_pp)
+    x_test_pp = imp.transform(x_test)
+    x_test_pp = scaler.transform(x_test_pp)
+    x_test_pp = pca.transform(x_test_pp)
+
+    print('\n')
+    print('Completed Preprocessing and Dimensionality Reduction')
+    print('\n')
+
+    return x_train_pp, x_test_pp, y_train, y_test
+
+
+xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
+                            learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
+
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 4000000)
+
+xgb_reg_model.fit(x_train_pp, y_train)
+
+print('\n')
+print('Finished Training')
+print('\n')
+
+pred = xgb_reg_model.predict(x_test_pp)
+pred = np.absolute(pred)
+print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, pred)))
+
+
     
 
 
