@@ -20,6 +20,7 @@ from sklearn.svm import LinearSVR
 import xgboost as xgb
 from sklearn.decomposition import PCA 
 import pickle 
+from sklearn.pipeline import Pipeline
 
 def get_metrics(y_true, y_preds):
     print('R2 Score: ' + str(r2_score(y_true, y_preds)))
@@ -77,24 +78,37 @@ def process_data(df, scale, pca_level):
     # print(data_x.head())
     data_y = df['meter_reading']
 
-    imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+    PP_Pipeline = Pipeline([
+        ('Imputer', SimpleImputer(missing_values=np.nan, strategy='mean')), 
+        ('Scaler', preprocessing.MinMaxScaler()), 
+        ('PCA', PCA(n_components=pca_level)),
+    ])
 
-    if scale == 'MinMax':
-        scaler = preprocessing.MinMaxScaler()
-    else:
-        scaler = preprocessing.StandardScaler()
+    # imp = SimpleImputer(missing_values=np.nan, strategy='mean')
+
+    # if scale == 'MinMax':
+    #     scaler = preprocessing.MinMaxScaler()
+    # else:
+    #     scaler = preprocessing.StandardScaler()
     
-    pca = PCA(n_components=pca_level)
+    # pca = PCA(n_components=pca_level)
     
     x_train, x_test, y_train, y_test = train_test_split(data_x, data_y, 
                                         test_size=0.3, random_state=4)
     
-    x_train_pp = imp.fit_transform(x_train)
-    x_train_pp = scaler.fit_transform(x_train_pp)
-    x_train_pp = pca.fit_transform(x_train_pp)
-    x_test_pp = imp.transform(x_test)
-    x_test_pp = scaler.transform(x_test_pp)
-    x_test_pp = pca.transform(x_test_pp)
+    x_train_pp = PP_Pipeline.fit_transform(x_train)
+    x_test_pp = PP_Pipeline.transform(x_test)
+
+    # x_train_pp = imp.fit_transform(x_train)
+    # x_train_pp = scaler.fit_transform(x_train_pp)
+    # x_train_pp = pca.fit_transform(x_train_pp)
+    # x_test_pp = imp.transform(x_test)
+    # x_test_pp = scaler.transform(x_test_pp)
+    # x_test_pp = pca.transform(x_test_pp)
+
+    PipelineFile = open("PipelineFile", "wb")
+    pickle.dump(PP_Pipeline, PipelineFile)
+    PipelineFile.close()
 
     print('\n')
     print('Completed Preprocessing and Dimensionality Reduction')
@@ -102,11 +116,39 @@ def process_data(df, scale, pca_level):
 
     return x_train_pp, x_test_pp, y_train, y_test
 
+def train_for_production(df, scale, pca_level):
+    data_x = feature_engine(df)
+    data_y = df['meter_reading']
+
+    PP_Pipeline = Pipeline([
+        ('Imputer', SimpleImputer(missing_values=np.nan, strategy='mean')), 
+        ('Scaler', preprocessing.MinMaxScaler()), 
+        ('PCA', PCA(n_components=pca_level)),
+    ])
+
+    print('\n')
+    print('The columns being used are: ')
+    print(list(data_x))
+    print('\n')
+
+    x_train_pp = PP_Pipeline.fit_transform(data_x)
+
+
+    PipelineFile = open("PipelineFile", "wb")
+    pickle.dump(PP_Pipeline, PipelineFile)
+    PipelineFile.close()
+
+    print('\n')
+    print('Completed Preprocessing and Dimensionality Reduction')
+    print('\n')
+
+    return x_train_pp, data_y
+
 
 xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
                             learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 4000000)
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 7000000)
 
 xgb_reg_model.fit(x_train_pp, y_train)
 
