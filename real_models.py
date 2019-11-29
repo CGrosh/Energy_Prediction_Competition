@@ -1,3 +1,4 @@
+#%%
 import pandas as pd 
 import numpy as np 
 import matplotlib.pyplot as plt 
@@ -21,6 +22,7 @@ import xgboost as xgb
 from sklearn.decomposition import PCA 
 import pickle 
 from sklearn.pipeline import Pipeline
+import lightgbm as lgb 
 
 def get_metrics(y_true, y_preds):
     print('R2 Score: ' + str(r2_score(y_true, y_preds)))
@@ -83,15 +85,6 @@ def process_data(df, scale, pca_level):
         ('Scaler', preprocessing.MinMaxScaler()), 
         ('PCA', PCA(n_components=pca_level)),
     ])
-
-    # imp = SimpleImputer(missing_values=np.nan, strategy='mean')
-
-    # if scale == 'MinMax':
-    #     scaler = preprocessing.MinMaxScaler()
-    # else:
-    #     scaler = preprocessing.StandardScaler()
-    
-    # pca = PCA(n_components=pca_level)
     
     x_train, x_test, y_train, y_test = train_test_split(data_x, data_y, 
                                         test_size=0.3, random_state=4)
@@ -99,16 +92,9 @@ def process_data(df, scale, pca_level):
     x_train_pp = PP_Pipeline.fit_transform(x_train)
     x_test_pp = PP_Pipeline.transform(x_test)
 
-    # x_train_pp = imp.fit_transform(x_train)
-    # x_train_pp = scaler.fit_transform(x_train_pp)
-    # x_train_pp = pca.fit_transform(x_train_pp)
-    # x_test_pp = imp.transform(x_test)
-    # x_test_pp = scaler.transform(x_test_pp)
-    # x_test_pp = pca.transform(x_test_pp)
-
-    PipelineFile = open("PipelineFile", "wb")
-    pickle.dump(PP_Pipeline, PipelineFile)
-    PipelineFile.close()
+    # PipelineFile = open("PipelineFile", "wb")
+    # pickle.dump(PP_Pipeline, PipelineFile)
+    # PipelineFile.close()
 
     print('\n')
     print('Completed Preprocessing and Dimensionality Reduction')
@@ -148,20 +134,38 @@ def train_for_production(df, scale, pca_level):
 xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
                             learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 7000000)
+RF_Regressor = RandomForestRegressor(random_state=1, n_estimators=15)
 
+Voter = VotingRegressor(estimators=[('XGB', xgb_reg_model), ('RF', RF_Regressor)])
+
+LightGBM = lgb.sklearn.LGBMRegressor(boosting_type='gbdt', n_estimators=20, num_leaves=100,
+                                    max_depth=20)
+
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 9000000)
+
+
+#%%
+start = time.time()
 xgb_reg_model.fit(x_train_pp, y_train)
+# Voter.fit(x_train_pp, y_train)
+# LightGBM.fit(x_train_pp, y_train)
 
 print('\n')
 print('Finished Training')
 print('\n')
 
-pred = xgb_reg_model.predict(x_test_pp)
-pred = np.absolute(pred)
-print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, pred)))
+preds = xgb_reg_model.predict(x_test_pp)
+# preds = LightGBM.predict(x_test_pp)
+preds = np.absolute(preds)
+end = time.time()
+print('Time: ', end-start)
+print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, preds)))
 
 
     
 
 
 
+
+
+# %%
