@@ -22,21 +22,7 @@ import xgboost as xgb
 from sklearn.decomposition import PCA 
 import pickle 
 from sklearn.pipeline import Pipeline
-import lightgbm as lgb 
 
-def get_metrics(y_true, y_preds):
-    print('R2 Score: ' + str(r2_score(y_true, y_preds)))
-    print('Explained Variance Score: ' + str(explained_variance_score(y_true, y_preds)))
-    print('Median Absolute Error: ' + str(median_absolute_error(y_true, y_preds)))
-    print('Mean Squared Error: ' + str(mean_squared_error(y_true, y_preds)))
-
-def rmsle(predictions, dmat):
-    labels = dmat.get_label()
-    predictions = np.abs(predictions)
-    diffs = np.log(predictions+1) - np.log(labels+1)
-    squared_diffs = np.square(diffs)
-    avg = np.mean(squared_diffs)
-    return ('RMSLE', np.sqrt(avg))
 
 def run_it(file, rows):
     data = get_data(file, rows)
@@ -114,10 +100,9 @@ def train_for_production(df, scale, pca_level):
 
     x_train_pp = PP_Pipeline.fit_transform(data_x)
 
-
-    PipelineFile = open("PipelineFile", "wb")
-    pickle.dump(PP_Pipeline, PipelineFile)
-    PipelineFile.close()
+    # PipelineFile = open("PipelineFile", "wb")
+    # pickle.dump(PP_Pipeline, PipelineFile)
+    # PipelineFile.close()
 
     print('\n')
     print('Completed Preprocessing and Dimensionality Reduction')
@@ -125,83 +110,25 @@ def train_for_production(df, scale, pca_level):
 
     return x_train_pp, data_y
 
-
-# xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
-#                             learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
-
-# RF_Regressor = RandomForestRegressor(random_state=1, n_estimators=15)
-
-# Voter = VotingRegressor(estimators=[('XGB', xgb_reg_model), ('RF', RF_Regressor)])
-
-
-
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 10000000)
-
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 5000000)
 
 #%%
-
-# LightGBM = lgb.sklearn.LGBMRegressor(boosting_type='gbdt', n_estimators=20, 
-#                                     num_leaves=100, max_depth=-1, 
-#                                     min_child_samples=50, learning_rate=0.3,
-#                                     min_child_weight=10)
-
-# LightGBM.fit(
-#     x_train_pp, 
-#     y_train, 
-#     eval_set=[(x_test_pp, y_test)], 
-#     eval_metric=rmsle_light, 
-#     # verbose=False,
-# )
-# LightGBM.fit(x_train_p-p, y_train)
-
-# leaves_vals = [100, 300, 400, 500, 1000]
-# depth_vals = [10, 15, 20, 30]
-# data_leaves = []
-
-# start = time.time()
-# xgb_reg_model.fit(x_train_pp, y_train)
-# Voter.fit(x_train_pp, y_train)
-
-# for leaf in range(len(leaves_vals)):
-#     for depth in depth_vals:
-#         light_mod = lgb.sklearn.LGBMRegressor(boosting_type='gbdt', 
-#                                             n_estimators=20, 
-#                                             num_leaves=leaves_vals[leaf], 
-#                                             max_depth=depth)
-#         start = time.time()
-#         light_mod.fit(x_train_pp, y_train)
-#         print('\n')
-#         print('Finished Training')
-#         print('\n')
-
-#         # preds = xgb_reg_model.predict(x_test_pp)
-#         preds = light_mod.predict(x_test_pp)
-#         preds = np.absolute(preds)
-#         end = time.time()
-#         print('Time: ', end-start)
-#         print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, preds)))
-#         print("Number of Leaves: ", leaves_vals[leaf])
-#         print("Max Depth of Model: ", depth)
+xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
+                                learning_rate=0.4, max_depth=20, 
+                                alpha=10, n_estimators=20)
 
 
-# print('\n')
-# print('Finished Training')
-# print('\n')
-preds = model_try.predict(x_test_pp)
+
+xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
+                                    learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
+
+xgb_reg_model.fit(x_train_pp, y_train)
+
+# params  ={"objective":"reg:squarederror", "colsample_bytree":1, 'learning_rate':0.4, 
+#             'max_depth':20, 'alpha':10, 'n_estimators':20}
+
+# xgb_reg = xgb.tra4in(params=params, dtrain=dtrain, num_boost_round=10)
+
+preds = xgb_reg_model.predict(x_test_pp)
 preds = np.absolute(preds)
-print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, preds)))
-# # preds = xgb_reg_model.predict(x_test_pp)
-# preds = LightGBM.predict(x_test_pp)
-# preds = np.absolute(preds)
-# # end = time.time()
-# # print('Time: ', end-start)
-# print("RMSLE: ", np.sqrt(mean_squared_log_error(y_test, preds)))
-
-
-    
-
-
-
-
-
-# %%
+print('RMSLE: ', np.sqrt(mean_squared_log_error(y_test, preds)))
