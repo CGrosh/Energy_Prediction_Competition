@@ -110,20 +110,27 @@ def train_for_production(df, scale, pca_level):
 
     return x_train_pp, data_y
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 5000000)
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 10000000)
 
 #%%
-xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
-                                learning_rate=0.4, max_depth=20, 
-                                alpha=10, n_estimators=20)
+# xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
+#                                 learning_rate=0.4, max_depth=20, 
+#                                 alpha=10, n_estimators=20)
 
 
 
 xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
-                                    learning_rate=0.4, max_depth=20, alpha=10, n_estimators=20)
+                                    learning_rate=0.4, max_depth=20, alpha=20, 
+                                    n_estimators=25, tree_method='hist')
 
+print("Beginning to Train the Model")
+start = time.time()
 xgb_reg_model.fit(x_train_pp, y_train)
-
+end = time.time()
+if (end-start)>=60:
+    print("Training took approx. " + str((end-start)/60) + " minutes")
+else:
+    print("Training took approx. " + str(end-start) + " seconds")
 # params  ={"objective":"reg:squarederror", "colsample_bytree":1, 'learning_rate':0.4, 
 #             'max_depth':20, 'alpha':10, 'n_estimators':20}
 
@@ -132,3 +139,5 @@ xgb_reg_model.fit(x_train_pp, y_train)
 preds = xgb_reg_model.predict(x_test_pp)
 preds = np.absolute(preds)
 print('RMSLE: ', np.sqrt(mean_squared_log_error(y_test, preds)))
+
+# %%
