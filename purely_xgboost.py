@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from sklearn import linear_model
 from sklearn import preprocessing
-from sklearn.model_selection import train_test_split, KFold, cross_val_score
+from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_squared_log_error
 from sklearn.metrics import median_absolute_error
 from sklearn.metrics import r2_score
@@ -26,7 +26,7 @@ from sklearn.pipeline import Pipeline
 
 def run_it(file, rows):
     data = get_data(file, rows)
-    x_train, x_test, y_train, y_test = process_data(data, 'MinMax', 0.90)
+    x_train, x_test, y_train, y_test = process_data(data, 'MinMax', 0.95)
     return x_train, x_test, y_train, y_test
 
 def feature_engine(df):
@@ -45,11 +45,11 @@ def feature_engine(df):
     cols.remove('building_id')
     cols.remove('timestamp')
     cols.remove('year_built')
-    cols.remove('site_id')
+    # cols.remove('site_id')
     cols.remove('Year')
     cols.remove('Month')
   
-    data_x = pd.get_dummies(df[cols], columns=['primary_use'])
+    data_x = pd.get_dummies(df[cols], columns=['primary_use', 'site_id'])
     return data_x
 
 
@@ -117,16 +117,35 @@ x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 10000000)
 #                                 learning_rate=0.4, max_depth=20, 
 #                                 alpha=10, n_estimators=20)
 
+n_est = 20
+max_depth = 20
+alpha = 11
+learning_rate = 0.4
 
+# xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
+#                                     learning_rate=learning_rate, min_child_weight=2, 
+#                                     max_depth=max_depth, alpha=alpha, n_estimators=n_est, 
+#                                     tree_method='hist')
 
 xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
-                                    learning_rate=0.4, max_depth=20, alpha=20, 
-                                    n_estimators=25, tree_method='hist')
+                                    min_child_weight=2, max_depth=max_depth, 
+                                    learning_rate=learning_rate, tree_method='hist', 
+                                    n_estimators=n_est, alpha=alpha)
+
+# param_grid = [{
+#     "n_estimators": [5, 10, 15, 20], 
+#     # "max_depth": [5, 10, 15, 20], 
+#     "alpha": np.linspace(10, 15, 2), 
+#     # "learning_rate":[0.4, 0.3, 0.5]
+# }]
+
+# grid_search = GridSearchCV(xgb_reg_model, param_grid, cv=3)
 
 print("Beginning to Train the Model")
 start = time.time()
 xgb_reg_model.fit(x_train_pp, y_train)
 end = time.time()
+print('\n')
 if (end-start)>=60:
     print("Training took approx. " + str((end-start)/60) + " minutes")
 else:
@@ -135,9 +154,14 @@ else:
 #             'max_depth':20, 'alpha':10, 'n_estimators':20}
 
 # xgb_reg = xgb.tra4in(params=params, dtrain=dtrain, num_boost_round=10)
-
+# print(grid_search.best_params_)
 preds = xgb_reg_model.predict(x_test_pp)
 preds = np.absolute(preds)
 print('RMSLE: ', np.sqrt(mean_squared_log_error(y_test, preds)))
+print("N_estimators :", n_est)
+print("Max_Depth: ", max_depth)
+print("Alpha Val: ", alpha)
+print("Learning Rate: ", learning_rate)
+# %
 
 # %%
