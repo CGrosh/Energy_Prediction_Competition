@@ -52,6 +52,19 @@ def feature_engine(df):
     data_x = pd.get_dummies(df[cols], columns=['primary_use', 'site_id'])
     return data_x
 
+def bin_sqft(df):
+    vals = df['square_feet'].describe()
+    lst = []
+    for i in range(len(df)):
+        if df['square_feet'][i] >= vals['75%']:
+            lst.append('Top')
+        elif df['square_feet'][i] < vals['75%'] and df['square_feet'][i] >= vals['50%']:
+            lst.append("High")
+        elif df['square_feet'][i] < vals['50%'] and df['square_feet'][i] >= vals['25%']:
+            lst.append('Middle')
+        elif df['square_feet'][i] < vals['25%']:
+            lst.append('Low')
+    return pd.Series(lst)
 
 def get_data(filename, row_num):
     df = pd.read_csv(filename, nrows=row_num)
@@ -59,6 +72,11 @@ def get_data(filename, row_num):
 
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
+    data_x['binned_sqft'] = bin_sqft(data_x)
+
+    data_x['floor_count'] = data_x.groupby('binned_sqft').transform(lambda x: x.fillna(x.mean()))
+    del data_x['binned_sqft']
+
     data_y = df['meter_reading']
 
     PP_Pipeline = Pipeline([
@@ -69,7 +87,7 @@ def process_data(df, scale, pca_level):
     
     x_train, x_test, y_train, y_test = train_test_split(data_x, data_y, 
                                         test_size=0.3, random_state=4)
-    
+    print(x_train.columns)
     x_train_pp = PP_Pipeline.fit_transform(x_train)
     x_test_pp = PP_Pipeline.transform(x_test)
 
