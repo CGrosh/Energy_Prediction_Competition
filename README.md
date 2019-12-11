@@ -1,2 +1,2 @@
 # Energy_Prediction_Competition
-Kaggle Competitionto predict building energy consumption
+Kaggle Competition to predict building energy consumption
