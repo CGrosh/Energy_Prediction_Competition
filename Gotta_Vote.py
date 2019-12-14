@@ -4,24 +4,18 @@ import numpy as np
 import matplotlib.pyplot as plt 
 from sklearn import linear_model
 from sklearn import preprocessing
-from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
+from sklearn.model_selection import train_test_split, KFold, cross_val_score
 from sklearn.metrics import mean_squared_error, mean_squared_log_error
-from sklearn.metrics import median_absolute_error
-from sklearn.metrics import r2_score
-from sklearn.metrics import explained_variance_score
-from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import PolynomialFeatures
 from sklearn.impute import SimpleImputer
 from util import *
 import time 
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import VotingRegressor, RandomForestRegressor, GradientBoostingRegressor
-from sklearn.metrics import explained_variance_score
-from sklearn.svm import LinearSVR
+from sklearn.ensemble import VotingRegressor, RandomForestRegressor
 import xgboost as xgb
 from sklearn.decomposition import PCA 
 import pickle 
 from sklearn.pipeline import Pipeline
+from catboost import CatBoostRegressor
+import lightgbm as lgb 
 
 
 def run_it(file, rows):
@@ -49,29 +43,8 @@ def feature_engine(df):
     cols.remove('Year')
     cols.remove('Month')
   
-    data_x = pd.get_dummies(df[cols], columns=['primary_use', 'meter'])
-    data_x['binned_sqft'] = bin_sqft(data_x)
-    data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
-    del data_x['binned_sqft']
-
-    data_x['building_id_v2'] = data_x['building_id'].astype('category')
-    data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
-
+    data_x = pd.get_dummies(df[cols], columns=['primary_use'])
     return data_x
-
-def bin_sqft(df):
-    vals = df['square_feet'].describe()
-    lst = []
-    for i in range(len(df)):
-        if df['square_feet'][i] >= vals['75%']:
-            lst.append('Top')
-        elif df['square_feet'][i] < vals['75%'] and df['square_feet'][i] >= vals['50%']:
-            lst.append("High")
-        elif df['square_feet'][i] < vals['50%'] and df['square_feet'][i] >= vals['25%']:
-            lst.append('Middle')
-        elif df['square_feet'][i] < vals['25%']:
-            lst.append('Low')
-    return pd.Series(lst)
 
 def get_data(filename, row_num):
     df = pd.read_csv(filename, nrows=row_num)
@@ -79,14 +52,6 @@ def get_data(filename, row_num):
 
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
-    data_x['binned_sqft'] = bin_sqft(data_x)
-
-    data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
-    del data_x['binned_sqft']
-
-    # data_x['building_id_v2'] = data_x['building_id'].astype('category')
-    # data_x['building_age'] = data_x.groupby('building_id_v2').transform(lambda x: x.fillna(x.mean()))
-
     data_y = df['meter_reading']
 
     PP_Pipeline = Pipeline([
@@ -97,7 +62,7 @@ def process_data(df, scale, pca_level):
     
     x_train, x_test, y_train, y_test = train_test_split(data_x, data_y, 
                                         test_size=0.3, random_state=4)
-    print(x_train.columns)
+    
     x_train_pp = PP_Pipeline.fit_transform(x_train)
     x_test_pp = PP_Pipeline.transform(x_test)
 
@@ -138,58 +103,47 @@ def train_for_production(df, scale, pca_level):
 
     return x_train_pp, data_y
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 4000000)
-
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 10000000)
 #%%
-# xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
-#                                 learning_rate=0.4, max_depth=20, 
-#                                 alpha=10, n_estimators=20)
 
-n_est = 20
+n_est = 25
 max_depth = 20
-alpha = 11
+alpha = 10
 learning_rate = 0.4
 
-# xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
-#                                     learning_rate=learning_rate, min_child_weight=2, 
-#                                     max_depth=max_depth, alpha=alpha, n_estimators=n_est, 
-#                                     tree_method='hist')
-
 xgb_reg_model = xgb.XGBRFRegressor(objective='reg:squarederror', colsample_bytree=1, 
-                                    min_child_weight=2, max_depth=max_depth, 
-                                    learning_rate=learning_rate, tree_method='hist', 
-                                    n_estimators=n_est, alpha=alpha)
+                                    learning_rate=learning_rate, min_child_weight=2, 
+                                    max_depth=max_depth, alpha=alpha, n_estimators=n_est, 
+                                    tree_method='hist')
 
-# param_grid = [{
-#     "n_estimators": [5, 10, 15, 20], 
-#     # "max_depth": [5, 10, 15, 20], 
-#     "alpha": np.linspace(10, 15, 2), 
-#     # "learning_rate":[0.4, 0.3, 0.5]
-# }]
+LightGBM = lgb.sklearn.LGBMRegressor(boosting_type='gbdt', n_estimators=20, 
+                                    num_leaves=100, max_depth=20)
 
-# grid_search = GridSearchCV(xgb_reg_model, param_grid, cv=3)
+Cat_B_Reg = CatBoostRegressor(iterations=10, learning_rate=0.4, 
+                            depth=10, loss_function='RMSE', l2_leaf_reg=11)
+
+# Voter = VotingRegressor(estimators=[('XBG', xgb_reg_model), 
+#                                     ('LGBM', LightGBM)]) 
+                                    # ('CatBoost', Cat_B_Reg)])
 
 print("Beginning to Train the Model")
 start = time.time()
-xgb_reg_model.fit(x_train_pp, y_train)
+# xgb_reg_model.fit(x_train_pp, y_train)
+# Cat_B_Reg.fit(x_train_pp, y_train)
+Voter.fit(x_train_pp, y_train)
 end = time.time()
 print('\n')
 if (end-start)>=60:
     print("Training took approx. " + str((end-start)/60) + " minutes")
 else:
     print("Training took approx. " + str(end-start) + " seconds")
-# params  ={"objective":"reg:squarederror", "colsample_bytree":1, 'learning_rate':0.4, 
-#             'max_depth':20, 'alpha':10, 'n_estimators':20}
 
-# xgb_reg = xgb.tra4in(params=params, dtrain=dtrain, num_boost_round=10)
-# print(grid_search.best_params_)
-preds = xgb_reg_model.predict(x_test_pp)
+preds = Voter.predict(x_test_pp)
 preds = np.absolute(preds)
 print('RMSLE: ', np.sqrt(mean_squared_log_error(y_test, preds)))
 print("N_estimators :", n_est)
 print("Max_Depth: ", max_depth)
 print("Alpha Val: ", alpha)
 print("Learning Rate: ", learning_rate)
-# %
 
 # %%
