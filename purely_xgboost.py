@@ -40,22 +40,32 @@ def feature_engine(df):
     df['Day'] = df['Day'].astype('int64')
 
     cols = list(df.columns)
-    cols.remove('meter_reading')
+    # cols.remove('meter_reading')
     cols.remove('Unnamed: 0')
-    cols.remove('building_id')
+    # cols.remove('building_id')
     cols.remove('timestamp')
     cols.remove('year_built')
     cols.remove('site_id')
     cols.remove('Year')
     cols.remove('Month')
-  
-    data_x = pd.get_dummies(df[cols], columns=['primary_use', 'meter'])
+    
+    le = preprocessing.LabelEncoder()
+    # data_x = pd.get_dummies(df[cols], columns=['primary_use', 'meter'])
+    data_x = df[cols]
+    
+    data_x['primary_use'] = le.fit_transform(data_x['primary_use'])
+    data_x['meter'] = le.fit_transform(data_x['meter'])
     data_x['binned_sqft'] = bin_sqft(data_x)
     data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
     del data_x['binned_sqft']
 
     data_x['building_id_v2'] = data_x['building_id'].astype('category')
-    data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
+    # data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
+    grouped = data_x.groupby('building_id_v2')['meter_reading'].mean()
+    data_x['mean_meter_reading_by_building_id'] = data_x['building_id_v2'].map(grouped)
+    del data_x['meter_reading']
+    del data_x['building_id_v2'] 
+    del data_x['building_id']
 
     return data_x
 
@@ -79,14 +89,6 @@ def get_data(filename, row_num):
 
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
-    data_x['binned_sqft'] = bin_sqft(data_x)
-
-    data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
-    del data_x['binned_sqft']
-
-    # data_x['building_id_v2'] = data_x['building_id'].astype('category')
-    # data_x['building_age'] = data_x.groupby('building_id_v2').transform(lambda x: x.fillna(x.mean()))
-
     data_y = df['meter_reading']
 
     PP_Pipeline = Pipeline([
@@ -138,15 +140,15 @@ def train_for_production(df, scale, pca_level):
 
     return x_train_pp, data_y
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 4000000)
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 7000000)
 
 #%%
 # xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
 #                                 learning_rate=0.4, max_depth=20, 
 #                                 alpha=10, n_estimators=20)
 
-n_est = 20
-max_depth = 20
+n_est = 30
+max_depth = 25
 alpha = 11
 learning_rate = 0.4
 
