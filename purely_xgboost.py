@@ -2,20 +2,23 @@
 import pandas as pd 
 import numpy as np 
 import matplotlib.pyplot as plt 
+# from sklearn.feature_selection import SelectKBest, f_classif, RFE
+# from sklearn import feature_selection
 from sklearn import linear_model
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
 from sklearn.metrics import mean_squared_error, mean_squared_log_error
-from sklearn.metrics import median_absolute_error
+from sklearn.metrics import median_absolute_error, make_scorer
 from sklearn.metrics import r2_score
 from sklearn.metrics import explained_variance_score
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.impute import SimpleImputer
 from util import *
+from sklearn.feature_selection import RFECV, f_regression
 import time 
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import VotingRegressor, RandomForestRegressor, GradientBoostingRegressor
+from sklearn.ensemble import VotingRegressor, RandomForestRegressor, ExtraTreesRegressor
 from sklearn.metrics import explained_variance_score
 from sklearn.svm import LinearSVR
 import xgboost as xgb
@@ -40,32 +43,32 @@ def feature_engine(df):
     df['Day'] = df['Day'].astype('int64')
 
     cols = list(df.columns)
-    # cols.remove('meter_reading')
+    cols.remove('meter_reading')
     cols.remove('Unnamed: 0')
     # cols.remove('building_id')
     cols.remove('timestamp')
     cols.remove('year_built')
-    cols.remove('site_id')
+    # cols.remove('site_id')
     cols.remove('Year')
-    cols.remove('Month')
+    # cols.remove('Month')
     
-    le = preprocessing.LabelEncoder()
-    # data_x = pd.get_dummies(df[cols], columns=['primary_use', 'meter'])
-    data_x = df[cols]
+    # le = preprocessing.LabelEncoder()
+    data_x = pd.get_dummies(df[cols], columns=['primary_use', 'meter', 'site_id', 'Month'])
+    # data_x = df[cols]
     
-    data_x['primary_use'] = le.fit_transform(data_x['primary_use'])
-    data_x['meter'] = le.fit_transform(data_x['meter'])
-    data_x['binned_sqft'] = bin_sqft(data_x)
-    data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
-    del data_x['binned_sqft']
+    # data_x['primary_use'] = le.fit_transform(data_x['primary_use'])
+    # data_x['meter'] = le.fit_transform(data_x['meter'])
+    # data_x['binned_sqft'] = bin_sqft(data_x)
+    # data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
+    # del data_x['binned_sqft']
 
-    data_x['building_id_v2'] = data_x['building_id'].astype('category')
-    # data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
-    grouped = data_x.groupby('building_id_v2')['meter_reading'].mean()
-    data_x['mean_meter_reading_by_building_id'] = data_x['building_id_v2'].map(grouped)
-    del data_x['meter_reading']
-    del data_x['building_id_v2'] 
-    del data_x['building_id']
+    # data_x['building_id_v2'] = data_x['building_id'].astype('category')
+    # # data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
+    # grouped = data_x.groupby('building_id_v2')['meter_reading'].mean()
+    # data_x['mean_meter_reading_by_building_id'] = data_x['building_id_v2'].map(grouped)
+    # del data_x['meter_reading']
+    # del data_x['building_id_v2'] 
+    # del data_x['building_id']
 
     return data_x
 
@@ -90,26 +93,39 @@ def get_data(filename, row_num):
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
     data_y = df['meter_reading']
+    print(len(data_x.columns))
 
     PP_Pipeline = Pipeline([
         ('Imputer', SimpleImputer(missing_values=np.nan, strategy='mean')), 
         ('Scaler', preprocessing.MinMaxScaler()), 
-        ('PCA', PCA(n_components=pca_level)),
+        ('Feature Selection', RFECV(estimator=linear_model.LinearRegression(), cv=5, scoring='neg_mean_squared_error'))
+        # ('PCA', PCA(n_components=pca_level)),
     ])
     
     x_train, x_test, y_train, y_test = train_test_split(data_x, data_y, 
                                         test_size=0.3, random_state=4)
-    print(x_train.columns)
-    x_train_pp = PP_Pipeline.fit_transform(x_train)
+    # print(x_train.columns)
+    pp_start = time.time()
+    x_train_pp = PP_Pipeline.fit_transform(x_train, y_train)
     x_test_pp = PP_Pipeline.transform(x_test)
+    end = time.time()
+    # ET = ExtraTreesRegressor(random_state=4, n_estimators=5)
+    # ET.fit(x_train_pp, y_train)
 
-    # PipelineFile = open("PipelineFile", "wb")
-    # pickle.dump(PP_Pipeline, PipelineFile)
-    # PipelineFile.close()
+    # feature_selector_cv = feature_selection.RFECV(ET, cv=10, step=1)
+
+    # x_train_pp = feature_selector_cv.fit_transform(x_train_pp, y_train)
+    # x_test_pp = feature_selector_cv.transform(x_test_pp)
+    # print(len(x_train_pp[0]))
+
+    PipelineFile = open("PipelineFile", "wb")
+    pickle.dump(PP_Pipeline, PipelineFile)
+    PipelineFile.close()
 
     print('\n')
     print('Completed Preprocessing and Dimensionality Reduction')
     print('\n')
+    print(end-pp_start, "seconds")
 
     return x_train_pp, x_test_pp, y_train, y_test
 
@@ -140,7 +156,7 @@ def train_for_production(df, scale, pca_level):
 
     return x_train_pp, data_y
 
-x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 7000000)
+x_train_pp, x_test_pp, y_train, y_test = run_it('Final_Data.csv', 5000000)
 
 #%%
 # xgb_reg_model = xgb.XGBRegressor(objective='reg:squarederror', colsample_bytree=1, 
