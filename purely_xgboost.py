@@ -58,9 +58,9 @@ def feature_engine(df):
     
     # data_x['primary_use'] = le.fit_transform(data_x['primary_use'])
     # data_x['meter'] = le.fit_transform(data_x['meter'])
-    # data_x['binned_sqft'] = bin_sqft(data_x)
-    # data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
-    # del data_x['binned_sqft']
+    data_x['binned_sqft'] = bin_sqft(data_x)
+    data_x['floor_count'] = data_x.groupby('binned_sqft')['floor_count'].transform(lambda x: x.fillna(x.mean()))
+    del data_x['binned_sqft']
 
     # data_x['building_id_v2'] = data_x['building_id'].astype('category')
     # # data['building_age'] = data_x.groupby('building_id_v2')['year_built'].transform(lambda x: x.fillna(x.mean()))
@@ -93,7 +93,7 @@ def get_data(filename, row_num):
 def process_data(df, scale, pca_level):
     data_x = feature_engine(df)
     data_y = df['meter_reading']
-    print(len(data_x.columns))
+    # print(len(data_x.columns))
 
     PP_Pipeline = Pipeline([
         ('Imputer', SimpleImputer(missing_values=np.nan, strategy='mean')), 
@@ -118,9 +118,9 @@ def process_data(df, scale, pca_level):
     # x_test_pp = feature_selector_cv.transform(x_test_pp)
     # print(len(x_train_pp[0]))
 
-    PipelineFile = open("PipelineFile", "wb")
-    pickle.dump(PP_Pipeline, PipelineFile)
-    PipelineFile.close()
+    # PipelineFile = open("PipelineFile", "wb")
+    # pickle.dump(PP_Pipeline, PipelineFile)
+    # PipelineFile.close()
 
     print('\n')
     print('Completed Preprocessing and Dimensionality Reduction')
